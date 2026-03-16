@@ -100,27 +100,29 @@ sequenceDiagram
 ```mermaid
 graph LR
     subgraph "greenware-tools repo"
-        A[config.env.example] --> B[config.env<br/>user creates]
-        C[cloud-init/] --> C1[user-data.template]
+        A[config.env.example] --> B["config.env<br/>user creates"]
+        C["cloud-init/"] --> C1[user-data.template]
         C --> C2[meta-data.template]
         C --> C3[network-config.template]
-        D[usb-provisioner/] --> D1[provision.sh]
-        D --> D2[setup-usb.sh]
-        D --> D3[auto-provision.service]
-        E[batch-flash/] --> E1[batch-flash.sh]
-        F[verify/] --> F1[verify-fleet.sh]
+        D["usb-provisioner/"] --> D1[prepare-usb.sh]
+        D --> D2[provision.sh]
+        D --> D3[firstboot-setup.sh]
+        D --> D4[auto-provision.service]
+        E["batch-flash/"] --> E1[batch-flash.sh]
+        F["verify/"] --> F1[verify-fleet.sh]
     end
 
-    subgraph "USB Stick (at runtime)"
-        G[/opt/target-image.img]
-        H[/opt/provisioner/] --> H1[provision.sh]
-        H --> H2[config.env]
-        H --> H3[next-number.txt]
-        H --> H4[cloud-init/templates]
+    subgraph "USB Stick"
+        P1["P1 - bootfs (FAT32)"] --> PB1["provisioner/provision.sh"]
+        P1 --> PB2["provisioner/config.env"]
+        P1 --> PB3["provisioner/cloud-init/templates"]
+        P1 --> PB4["provisioner/next-number.txt"]
+        P2["P2 - rootfs (ext4)"]
+        P3["P3 - GWDATA (FAT32)"] --> PG1["target-image.img.xz"]
     end
 
-    D2 -->|setup-usb.sh copies| G
-    D2 -->|setup-usb.sh copies| H
+    D1 -->|"prepare-usb.sh creates"| P1
+    D1 -->|"prepare-usb.sh creates"| P3
 ```
 
 ## Network Topology
@@ -134,7 +136,7 @@ graph TB
     end
 
     subgraph "Operational Phase"
-        PI1 -->|Tailscale| HS[Headscale<br/>funnel.unredacted.net]
+        PI1 -->|Tailscale| HS["Headscale<br/>my.headscale.net"]
         PI2 -->|Tailscale| HS
         PIN -->|Tailscale| HS
         HS -->|Mesh| ADMIN[Admin Machine<br/>tailscale ssh]
