@@ -1,0 +1,9 @@
+# Network configuration for Raspberry Pi provisioning
+# Enables DHCP on the Ethernet interface (eth0)
+# Required by the NoCloud datasource alongside user-data and meta-data
+
+network:
+  version: 2
+  ethernets:
+    eth0:
+      dhcp4: true

@@ -1,0 +1,81 @@
+#cloud-config
+
+hostname: __HOSTNAME__
+manage_etc_hosts: true
+
+timezone: UTC
+
+# Explicitly enable root partition expansion (cloud-init default, made explicit)
+growpart:
+  mode: auto
+  devices: [/]
+resize_rootfs: true
+
+users:
+  - name: __ADMIN_USER__
+    groups: [sudo, adm, dialout, audio, video, plugdev, input, gpio, spi, i2c]
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: __LOCK_PASSWD__
+    plain_text_passwd: __ADMIN_PASSWORD__
+    ssh_authorized_keys:
+      - __SSH_PUBLIC_KEY__
+
+# Disable password-based SSH — key-only access
+ssh_pwauth: false
+
+package_update: true
+packages:
+  - sudo
+  - curl
+  - git
+
+runcmd:
+  # Pi has no hardware RTC — clock starts at OS image build date (Dec 2025).
+  # Without correct time, apt signatures and TLS certs fail validation.
+  # Wait for NTP sync before doing anything that needs valid timestamps.
+  - |
+    echo "Waiting for NTP time sync..."
+    timedatectl set-ntp true
+    for i in $(seq 1 60); do
+      if timedatectl show -p NTPSynchronized --value 2>/dev/null | grep -q "yes"; then
+        echo "NTP synchronized after ${i}s: $(date)"
+        break
+      fi
+      if [ "$i" -eq 60 ]; then
+        echo "WARNING: NTP sync timed out after 60s, current time: $(date)"
+        echo "Attempting to continue anyway..."
+      fi
+      sleep 1
+    done
+  # Install Tailscale (with retry for transient network failures)
+  - |
+    for attempt in 1 2 3 4 5; do
+      if curl -fsSL https://tailscale.com/install.sh | sh; then
+        break
+      fi
+      echo "Tailscale install attempt $attempt failed, retrying in 10s..."
+      sleep 10
+    done
+  # Enable and start tailscaled
+  - systemctl enable --now tailscaled
+  # Wait for tailscaled socket to be ready (known race condition)
+  - |
+    for i in $(seq 1 30); do
+      if tailscale status >/dev/null 2>&1; then
+        break
+      fi
+      echo "Waiting for tailscaled to be ready... ($i/30)"
+      sleep 2
+    done
+  # Join tailnet via Headscale
+  # --ssh: enable Tailscale SSH (replaces standard SSH)
+  # --accept-risk=lose-ssh: acknowledge that standard SSH will be replaced
+  # --timeout=60s: wait up to 60s for tailscaled if still not ready
+  - tailscale up --ssh --login-server=__HEADSCALE_URL__ --authkey=__TAILSCALE_AUTH_KEY__ --accept-risk=lose-ssh --timeout=60s
+  # Redact the auth key from cloud-init artifacts for security
+  - sed -i 's/--authkey=[^ ]*/--authkey=REDACTED/g' /boot/firmware/user-data /etc/cloud/cloud.cfg.d/*.cfg /var/lib/cloud/instance/user-data.txt 2>/dev/null || true
+  - sed -i 's/tskey-preauth-[a-zA-Z0-9]*/REDACTED/g' /boot/firmware/user-data /etc/cloud/cloud.cfg.d/*.cfg /var/lib/cloud/instance/user-data.txt 2>/dev/null || true
+
+# Write cloud-init output to boot partition for debugging
+output: { all: "| tee -a /boot/firmware/cloud-init-output.log" }

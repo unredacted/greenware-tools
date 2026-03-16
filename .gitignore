@@ -1,0 +1,13 @@
+# Secrets — never commit these
+provisioning/config.env
+
+# OS images — too large for git
+*.img
+*.img.xz
+
+# Provisioner runtime artifacts
+provision.log
+next-number.txt
+
+# macOS
+.DS_Store

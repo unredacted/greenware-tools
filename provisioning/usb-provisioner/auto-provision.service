@@ -1,0 +1,20 @@
+[Unit]
+Description=GreenWare Auto-Provision Raspberry Pi
+Documentation=https://github.com/unredacted/greenware-tools
+After=multi-user.target
+# Only run if the provisioner script exists (i.e., we booted from the USB stick)
+ConditionPathExists=/opt/provisioner/provision.sh
+# Note: /dev/mmcblk0 always exists on Raspberry Pi (controller is always enumerated),
+# so we cannot use ConditionPathExists for it. The SD card readability check
+# is performed inside provision.sh instead.
+
+[Service]
+Type=oneshot
+ExecStart=/opt/provisioner/provision.sh
+StandardOutput=journal+console
+StandardError=journal+console
+# Give the flash plenty of time to complete
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target
